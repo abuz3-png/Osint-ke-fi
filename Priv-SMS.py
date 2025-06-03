@@ -1,3 +1,4 @@
+from telegram import Update
 import subprocess
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
